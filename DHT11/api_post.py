@@ -1,92 +1,76 @@
-import RPi.GPIO as GPIO
-import dht11
+from dht11 import DHT11     
 import tsl2561
 import requests
 import json
 import time
-import csv
-import ipget
+import os
 
-# initialize GPIO
-GPIO.setwarnings(False)
-GPIO.setmode(GPIO.BCM)
-GPIO.cleanup()
+dht11 = DHT11()
 
-instance = dht11.DHT11(pin=4)
+SERVER = os.environ['UCITY_ABSTRACT_API_SERVER']
+UCODE_TEMP = os.environ["UCODE_THERMOMETER"]
+UCODE_HUMID = os.environ["UCODE_HYGROMETER"]
+UCODE_ILLUMI = os.environ["UCODE_ILLUMINOMETER"]
+INTERVAL = os.environ['SENSOR_INTERVAL']
 
-SERVER = ""
-DEV_UCODE = ""
 HEADERS = {'Content-type': 'application/json'}
 
-def getRaspiInfo():
-    url = SERVER + "/api/" + DEV_UCODE + "/raspberrypi/info/"
-    r = requests.get(url=url)
-    return r.json()
+def postIlluminance():
+    lux = tsl2561.getCalcLux()
+    timestamp = time.strftime('%FT%T%z', time.localtime())
+    
+    try:
+        url = SERVER + "/devices/" + UCODE_ILLUMI + "/state"
+        body = {'value': lux, 'timestamp': timestamp}
+        req = requests.put(url, data=json.dumps(body), headers=HEADERS, timeout=10.0)
+        print(req.status_code)
+    except:
+        return False
+    else:
+        return True    
 
-def postRaspiIpaddress():
-    url = SERVER + "/api/raspberrypi/ipaddress/"
-    ip = ipget.ipget()
-    ipaddress = ip.ipaddr("wlan0")
-
-    data = {
-        "dev_ucode": DEV_UCODE,
-        "ip": ipaddress
-    }
+def postTemp():
+    temperature = dht11.readTemp()
+    timestamp = time.strftime('%FT%T%z', time.localtime())
 
     try:
-        conn = requests.post(url=url, data=json.dumps(data), headers=HEADERS, timeout=30.0)
+        url = SERVER + "/devices/" + UCODE_TEMP + "/state"
+        body = {'value': temperature, 'timestamp': timestamp}
+        req = requests.put(url, data=json.dumps(body), headers=HEADERS, timeout=10.0)
+        print(req.status_code)
     except:
-        time.sleep(10)
-        postRaspiIpaddress()
+        return False
+    else:
+        return True
 
-def readDHT11All():
-    while True:
-        result = instance.read()
-        if result.is_valid():
-            return result.temperature, result.humidity
-        else :
-            continue;
-
-def postData(infoList):
-    temperature, humidity = readDHT11All()
-    lux = tsl2561.getCalcLux()
-    dataList = [temperature, humidity, lux]
+def postHumidity():
+    humidity = dht11.readHumidity()
+    timestamp = time.strftime('%FT%T%z', time.localtime())
     
-    """
-    print("temperature: %f" % temperature)
-    print("humidity: %f" % humidity)
-    print("lux: %f" % lux)
-    """
-
-    url = SERVER + "/api/koshizuka-lab/raspberrypi/sensorstate/"
-    headers = {'Content-type': 'application/json'}
-    
-    count=0
-    for data in infoList:
-        data["value"] = dataList[count]
-        
-        try:
-            conn = requests.post(url, data=json.dumps(data), headers=HEADERS, timeout=30.0)
-            #print(conn.status_code)
-            count+=1
-        except TimeoutError:
-            #print("TimeoutError")
-            return False
-        except requests.exceptions.ConnectionError:
-            #print("Connection_Error")
-            return False
-    return True
+    try:
+        url = SERVER + "/devices/" + UCODE_HUMID + "/state"
+        body = {'value': humidity, 'timestamp': timestamp}
+        req = requests.put(url, data=json.dumps(body), headers=HEADERS, timeout=10.0)
+        print(req.status_code)
+    except:
+        return False
+    else:
+        return True
 
 if __name__ == '__main__':
     try:
-        infoList = getRaspiInfo()
-        postRaspiIpaddress()
         while True:
-            if postData(infoList):
-                time.sleep(60)
-            else:
-                continue
+            print("start")
+            tStart = time.time()
+            print("postIlluminance: ", end="")
+            postIlluminance()
+            print("postTemp: ", end="")
+            postTemp()
+            print("postHumidity: ", end="")
+            postHumidity()
+            print("end")
+            tEnd = time.time()
+            tWait = INTERVAL - (tEnd - tStart)
+            time.sleep(max(0, tWait))
     except KeyboardInterrupt:
         pass
-    finally:
-        GPIO.cleanup()
