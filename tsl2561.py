@@ -32,7 +32,7 @@ def setup():
     # print "%d" % part
     i2c.write_byte_data(ADDR, REG_TIMING, TIMING)
     i2c.write_byte_data(ADDR, REG_CONTROL, CONTROL_POWER_ON)
-    time.sleep(0.403)
+    time.sleep(0.5)
 
     ch0low = i2c.read_byte_data(ADDR,REG_DATA0LOW)
     ch0high = i2c.read_byte_data(ADDR,REG_DATA0HIGH)
